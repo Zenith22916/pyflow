@@ -22,6 +22,8 @@ import tokenize
 # ---------- 配置区 ----------
 DEFAULT_OUTPUT = "flow.html"
 TERMINAL_KINDS = {"return", "raise", "break", "continue"}
+# 统一字体：base64 内嵌进生成的 HTML（文件不存在则回退系统等宽字体）
+FONT_PATH = r"E:\八爪鱼项目仪表盘-octopus-rpa-console-dashboard\web\fonts\maple-mono.woff2"
 
 
 # ---------- 基础设施区 ----------
@@ -65,13 +67,17 @@ def covered_lines(tree):
 def assign_comments(src, tree):
     """把不属于任何语句行范围的注释，就近分配给下一个起始点。
 
-    返回 (pre_map, head_map, tail)：
-      pre_map  行号 -> 注释列表（挂到该行起始的语句上方）
-      head_map 行号 -> 注释列表（挂到该行起始的函数头）
+    返回 (pre_map, head_map, tail)：每组的行文本保留组内相对缩进
+    （以组内首行缩进为基准），用于节点内左对齐显示层级。
+      pre_map  行号 -> 注释行列表（挂到该行起始的语句上方）
+      head_map 行号 -> 注释行列表（挂到该行起始的函数头）
       tail     无归属注释 [(行号, 文本)]（挂到所在函数末尾说明）
     """
     cov = covered_lines(tree)
-    free = [(r, t) for r, t in collect_comments(src) if r not in cov]
+    free = []
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT and tok.start[0] not in cov:
+            free.append((tok.start[0], " " * tok.start[1] + tok.string.rstrip()))
     anchors = {}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -80,14 +86,19 @@ def assign_comments(src, tree):
             anchors.setdefault(node.lineno, "stmt")
     starts = sorted(anchors)
     pre_map, head_map, tail = {}, {}, []
-    for row, text in free:
+    for row, line in free:
         nxt = next((s for s in starts if s > row), None)
         if nxt is None:
-            tail.append((row, text))
+            tail.append((row, line.strip()))
         elif anchors[nxt] == "def":
-            head_map.setdefault(nxt, []).append(text)
+            head_map.setdefault(nxt, []).append(line)
         else:
-            pre_map.setdefault(nxt, []).append(text)
+            pre_map.setdefault(nxt, []).append(line)
+    norm = lambda lines: (lambda base: [" " * max(0, len(l) - len(l.lstrip()) - base) + l.strip()
+                                        for l in lines])(len(lines[0]) - len(lines[0].lstrip()))
+    for m in (pre_map, head_map):
+        for k in m:
+            m[k] = norm(m[k])
     return pre_map, head_map, tail
 
 
@@ -307,16 +318,17 @@ TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <title>pyflow - __FILE__</title>
 <style>
+__FONT_FACE__
 :root{
   --bg:#14161a; --panel:#1b1e24; --line:#2a2e37; --txt:#c9d1d9; --dim:#8b95a5;
   --gold:#c9a227; --gold-dim:#8a7326;
 }
 *{box-sizing:border-box; margin:0; padding:0}
 html,body{height:100%; overflow:hidden}
-body{background:var(--bg); color:var(--txt); font-family:"Segoe UI",system-ui,sans-serif; display:flex; flex-direction:column}
+body{background:var(--bg); color:var(--txt); font-family:"Maple Mono",Consolas,"Microsoft YaHei",monospace; display:flex; flex-direction:column}
 header{display:flex; align-items:center; gap:14px; padding:8px 16px; background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto; flex-wrap:wrap}
 header h1{font-size:14px; font-weight:600; color:var(--gold)}
-header .file{font-family:Consolas,monospace; font-size:12px; color:var(--dim)}
+header .file{font-family:"Maple Mono",Consolas,monospace; font-size:12px; color:var(--dim)}
 .zoom{display:flex; gap:4px; margin-left:auto}
 .zoom button{background:#232830; color:var(--txt); border:1px solid var(--line); border-radius:5px; padding:3px 10px; cursor:pointer; font-size:12px}
 .zoom button:hover{border-color:var(--gold); color:var(--gold)}
@@ -324,7 +336,7 @@ header .file{font-family:Consolas,monospace; font-size:12px; color:var(--dim)}
 #side{width:200px; flex:0 0 auto; background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:12px 8px; scrollbar-width:none; -ms-overflow-style:none}
 #side::-webkit-scrollbar{display:none; width:0; height:0}
 #side .lb{font-size:11px; color:var(--dim); padding:0 8px 8px; letter-spacing:1px}
-#side .fn{display:block; width:100%; text-align:left; padding:5px 10px; margin:1px 0; border-radius:6px; cursor:pointer; font-family:Consolas,"Courier New",monospace; font-size:12px; color:var(--dim); border:1px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#side .fn{display:block; width:100%; text-align:left; padding:5px 10px; margin:1px 0; border-radius:6px; cursor:pointer; font-family:"Maple Mono",Consolas,monospace; font-size:12px; color:var(--dim); border:1px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 #side .fn .star{color:var(--gold); margin-left:5px}
 #side .fn.entry{color:#e2c96a; border-color:rgba(201,162,39,.30)}
 #side .fn:hover{background:#232830}
@@ -333,30 +345,34 @@ header .file{font-family:Consolas,monospace; font-size:12px; color:var(--dim)}
 #wrap{flex:1 1 auto; min-width:0; overflow:hidden; position:relative; cursor:grab; user-select:none; -webkit-user-select:none; background:
   radial-gradient(circle at 50% 30%, #191c22 0%, var(--bg) 70%)}
 #wrap.dragging{cursor:grabbing}
-#cv{transform-origin:0 0; will-change:transform}
+#cv{transform-origin:0 0}
 #cv svg{display:block}
 .legend{position:fixed; right:14px; bottom:12px; background:rgba(23,26,31,.92); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:11px; color:var(--dim); line-height:1.9; z-index:5}
 .legend i{display:inline-block; width:14px; height:9px; margin-right:6px; vertical-align:middle; border:1px solid}
-.legend .l1{background:#232830; border-color:#454d5a}
+.legend .l1{background:#20304a; border-color:#4a8fd0}
 .legend .l2{background:#262233; border-color:#8a6fc0; transform:rotate(0)}
 .legend .l3{background:#2b2416; border-color:var(--gold); border-radius:5px}
 .legend .l4{background:#33262a; border-color:#c1666b}
-svg text{font-family:Consolas,"Courier New",monospace; font-size:13px}
+svg text{font-family:"Maple Mono",Consolas,"Microsoft YaHei",monospace; font-size:13px}
 text.nt{fill:#d6dbe3}
-text.cmt{fill:#7e8f5a; font-style:italic}
+tspan.cmt{fill:#8a93a0; font-style:italic}
 text.dm{fill:#d9cdf2}
 text.pl{fill:#e8d9a8}
 text.bx{fill:var(--gold); font-size:12px}
 text.lb{fill:#9aa0aa; font-size:11px}
 text.lp{fill:#6fa8dc; font-size:11px}
 text.tl{fill:var(--dim); font-size:12px; font-weight:bold}
-.nd-stmt rect.bx2{fill:#232830; stroke:#454d5a}
+.nd-stmt rect.bx2,.nd-assert rect.bx2{fill:#20304a; stroke:#4a8fd0}
+.nd-stmt text.nt,.nd-assert text.nt{fill:#cfe0f2}
 .nd-return rect.bx2{fill:#33262a; stroke:#c1666b}
 .nd-return text.nt{fill:#f0c9c9}
-.nd-break rect.bx2,.nd-continue rect.bx2,.nd-raise rect.bx2{fill:#2e2a22; stroke:#b08d3e}
+.nd-break rect.bx2,.nd-continue rect.bx2{fill:#2e2a22; stroke:#b08d3e}
+.nd-raise rect.bx2{fill:#33262a; stroke:#c1666b}
+.nd-raise text.nt{fill:#f0c9c9}
 .nd-assert rect.bx2{fill:#232830; stroke:#454d5a}
 .nd-def rect.bx2{fill:#242a2e; stroke:#4a8fa8}
 .nd-def text.nt{fill:#a8d4e8}
+.nd-cmt rect.bx2{fill:transparent; stroke:none}
 .dia polygon{fill:#262233; stroke:#8a6fc0; stroke-width:1.2}
 .pill rect{fill:#2b2416; stroke:var(--gold); stroke-width:1.2}
 .boxx rect.frame{fill:rgba(201,162,39,.03); stroke:var(--gold); stroke-dasharray:6 4; rx:8}
@@ -399,7 +415,9 @@ document.getElementById("finfo").textContent = DATA.file + " · " + DATA.functio
 /* ============ 布局常量 ============ */
 const FS=13, LH=19, PADX=14, PADY=9, GAP=34, LINK_H=44, MERGE=25, ROW_GAP=26,
       LOOP_R=24, LOOP_L=52, TAIL=24, SEC=100, CHIP_H=20;
-function tw(s){let w=0;for(const ch of String(s)){const c=ch.codePointAt(0);w+=(c>0x2E7F)?FS:FS*0.56;}return w;}
+const _meas=document.createElement("canvas").getContext("2d");
+_meas.font=FS+'px "Maple Mono",Consolas,"Microsoft YaHei",monospace';
+function tw(s){return _meas.measureText(String(s)).width;}
 function maxW(lines){let m=0;for(const l of lines)m=Math.max(m,tw(l.t!=null?l.t:l));return m;}
 function diaSize(lines){return {w:maxW(lines)+96+30, h:lines.length*LH+34+12};}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
@@ -436,6 +454,15 @@ function leafBlock(lines,cls){
   const w=maxW(lines)+2*PADX, h=lines.length*LH+2*PADY;
   return {L:w/2+8,R:w/2+8,h,nodes:[{t:"rect",x:-w/2,y:0,w,h,lines,cls}],
           edges:[],exit:[0,h]};
+}
+
+function commentBlock(cm){
+  if(!cm||!cm.length) return null;
+  const lines=cm.map(t=>({t,c:"cmt"}));
+  const w=maxW(lines)+18, h=lines.length*LH+4;
+  return {L:w/2+4,R:w/2+4,h,
+          nodes:[{t:"rect",x:-w/2,y:0,w,h,lines,cls:"nd-cmt"}],
+          edges:[],exit:null};
 }
 
 function layoutLeaf(s,pfx){
@@ -604,14 +631,18 @@ function layoutSeq(stmts,pfx){
 }
 function layoutStmt(s,pfx){
   switch(s.k){
-    case "if": return layoutIf(s,pfx);
-    case "while": case "for": return layoutLoop(s,pfx);
-    case "try": return layoutTry(s,pfx);
-    case "with": return compose([leafBlock([{t:s.h}],"nd-stmt"), layoutSeq(s.b,pfx+"/b")]);
+    case "if": return withComments(s, layoutIf(s,pfx));
+    case "while": case "for": return withComments(s, layoutLoop(s,pfx));
+    case "try": return withComments(s, layoutTry(s,pfx));
+    case "with": return withComments(s, compose([leafBlock([{t:s.h}],"nd-stmt"), layoutSeq(s.b,pfx+"/b")]));
     case "def": {const b=leafBlock((s.cm||[]).map(t=>({t,c:"cmt"})).concat(s.lines.map(t=>({t}))),"nd-def");
                  return b;}
     default: return layoutLeaf(s,pfx);
   }
+}
+function withComments(s,block){
+  const cb=commentBlock(s.cm);
+  return cb? compose([cb,block]) : block;
 }
 
 /* ============ SVG 渲染 ============ */
@@ -702,7 +733,7 @@ function renderAll(){
   });
   const W=Math.max(...Ls)+Math.max(...Rs)+80, H=y;
   const offX=Math.max(...Ls)+40;
-  const svg=`<svg width="${W.toFixed(0)}" height="${H.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" xmlns="http://www.w3.org/2000/svg">
+  const svg=`<svg width="${(W*view.s).toFixed(0)}" height="${(H*view.s).toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" xmlns="http://www.w3.org/2000/svg">
 <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b95a5"/></marker>
 <marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6fa8dc"/></marker></defs>
 <g transform="translate(${offX},0)">
@@ -715,7 +746,7 @@ function renderAll(){
 /* ============ 交互 ============ */
 const view={s:1,tx:0,ty:0};
 function applyView(){
-  document.getElementById("cv").style.transform=`translate(${view.tx}px,${view.ty}px) scale(${view.s})`;
+  document.getElementById("cv").style.transform=`translate(${view.tx}px,${view.ty}px)`;
 }
 function zoomBy(k){
   const wrap=document.getElementById("wrap");
@@ -724,18 +755,20 @@ function zoomBy(k){
   view.s=Math.min(3,Math.max(0.2,view.s*k));
   const px=(cx-view.tx)/sOld, py=(cy-view.ty)/sOld;
   view.tx=cx-px*view.s; view.ty=cy-py*view.s;
+  renderAll();      // 缩放重设 SVG 实际尺寸，矢量渲染保持清晰
   applyView();
 }
 function fitWidth(){
   const wrap=document.getElementById("wrap");
   const svg=document.querySelector("#cv svg");
   const W=parseFloat(svg.getAttribute("viewBox").split(" ")[2]);
-  view.s=Math.min(1.6,Math.max(0.3,(wrap.clientWidth-40)/W));
+  view.s=Math.min(1.6,Math.max(0.2,(wrap.clientWidth-40)/W));
   view.tx=(wrap.clientWidth-W*view.s)/2;
   view.ty=24;
+  renderAll();
   applyView();
 }
-function resetView(){ view.s=1; view.tx=40; view.ty=24; applyView(); }
+function resetView(){ view.s=1; view.tx=40; view.ty=24; renderAll(); applyView(); }
 
 document.getElementById("wrap").addEventListener("wheel",e=>{
   e.preventDefault();          // 滚轮直接缩放，平移交给拖拽
@@ -809,12 +842,31 @@ function buildIndex(){
 }
 
 buildIndex();
-renderAll();
-fitWidth();
+/* 字体加载完成后再布局：canvas measureText 与 SVG 同一字体引擎，宽度精确 */
+const _init=()=>{renderAll(); fitWidth();};
+if(document.fonts && document.fonts.load){
+  document.fonts.load(FS+'px "Maple Mono"').then(_init).catch(_init);
+}else{
+  _init();
+}
 </script>
 </body>
 </html>
 """
+
+
+def load_font_face():
+    """读取统一字体并构造 @font-face（base64 内嵌）；失败返回空串。"""
+    import base64
+    import os
+    if not os.path.isfile(FONT_PATH):
+        log(f"字体文件不存在，回退系统等宽字体: {FONT_PATH}", "warn")
+        return ""
+    raw = open(FONT_PATH, "rb").read()
+    b64 = base64.b64encode(raw).decode("ascii")
+    log(f"已内嵌字体 maple-mono.woff2（{len(raw) // 1024} KB）")
+    return (f"@font-face{{font-family:'Maple Mono';"
+            f"src:url(data:font/woff2;base64,{b64}) format('woff2')}}")
 
 
 def run(target, output):
@@ -822,7 +874,10 @@ def run(target, output):
     n_funcs = len(data["functions"])
     log(f"分析完成：{n_funcs} 个函数，入口 {len(data['entries'])} 个：{', '.join(data['entries'])}")
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    html = TEMPLATE.replace("__PAYLOAD__", payload).replace("__FILE__", data["file"])
+    html = (TEMPLATE
+            .replace("__FONT_FACE__", load_font_face())
+            .replace("__PAYLOAD__", payload)
+            .replace("__FILE__", data["file"]))
     with open(output, "w", encoding="utf-8") as f:
         f.write(html)
     log(f"已生成: {output}")
