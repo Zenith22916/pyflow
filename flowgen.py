@@ -110,9 +110,16 @@ def collect_calls(node, fnames):
 
 
 def src_lines_of(node, src_lines):
-    """语句源码行原文（去前导/尾部空白，保留行尾注释与原有换行）。"""
+    """语句源码行原文：首行顶格，续行保留相对缩进；行尾注释与原有换行不变。"""
     end = getattr(node, "end_lineno", None) or node.lineno
-    return [src_lines[i].strip() for i in range(node.lineno - 1, end)]
+    raw = [src_lines[i] for i in range(node.lineno - 1, end)]
+    base = len(raw[0]) - len(raw[0].lstrip())
+    out = []
+    for ln in raw:
+        s = ln.rstrip()
+        ind = len(s) - len(s.lstrip())
+        out.append(" " * max(0, ind - base) + s.strip())
+    return out
 
 
 def ends_terminal(body_nodes):
