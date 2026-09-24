@@ -421,7 +421,8 @@ function fitWidth(){
 function resetView(){ view.s=1; renderAll(); document.getElementById("wrap").scrollTo(0,0); }
 
 document.getElementById("wrap").addEventListener("wheel",e=>{
-  if(e.ctrlKey){ e.preventDefault(); zoomBy(e.deltaY<0?1.12:0.9); }
+  e.preventDefault();          // 滚轮直接缩放，平移交给拖拽
+  zoomBy(e.deltaY<0?1.12:0.9);
 },{passive:false});
 
 /* ============ 鼠标拖拽平移 ============ */
