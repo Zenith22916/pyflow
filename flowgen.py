@@ -205,6 +205,9 @@ class Converter:
             k = "raise"
         elif isinstance(st, ast.Assert):
             k = "assert"
+        elif (isinstance(st, ast.Expr) and isinstance(st.value, ast.Constant)
+              and isinstance(st.value.value, str)):
+            k = "docstr"   # 三引号文档字符串按注释样式渲染
         else:
             k = "stmt"
         node = {"k": k, "lines": src_lines_of(st, self.src), "cm": cm}
@@ -373,6 +376,7 @@ text.tl{fill:var(--dim); font-size:12px; font-weight:bold}
 .nd-def rect.bx2{fill:#242a2e; stroke:#4a8fa8}
 .nd-def text.nt{fill:#a8d4e8}
 .nd-cmt rect.bx2{fill:transparent; stroke:none}
+.nd-docstr rect.bx2{fill:transparent; stroke:none}
 .dia polygon{fill:#262233; stroke:#8a6fc0; stroke-width:1.2}
 .pill rect{fill:#2b2416; stroke:var(--gold); stroke-width:1.2}
 .boxx rect.frame{fill:rgba(201,162,39,.03); stroke:var(--gold); stroke-dasharray:6 4; rx:8}
@@ -466,7 +470,8 @@ function commentBlock(cm){
 }
 
 function layoutLeaf(s,pfx){
-  const lines = (s.cm||[]).map(t=>({t,c:"cmt"})).concat((s.lines||[]).map(t=>({t})));
+  const codeCls = s.k==="docstr" ? "cmt" : null;
+  const lines = (s.cm||[]).map(t=>({t,c:"cmt"})).concat((s.lines||[]).map(t=>({t,c:codeCls})));
   const w=maxW(lines)+2*PADX, h=lines.length*LH+2*PADY;
   const nodes=[{t:"rect",x:-w/2,y:0,w,h,lines,cls:"nd-"+s.k}];
   const edges=[]; let L=w/2+8, R=w/2+8;

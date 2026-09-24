@@ -59,6 +59,7 @@ text.tl{fill:var(--dim); font-size:12px; font-weight:bold}
 .nd-def rect.bx2{fill:#242a2e; stroke:#4a8fa8}
 .nd-def text.nt{fill:#a8d4e8}
 .nd-cmt rect.bx2{fill:transparent; stroke:none}
+.nd-docstr rect.bx2{fill:transparent; stroke:none}
 .dia polygon{fill:#262233; stroke:#8a6fc0; stroke-width:1.2}
 .pill rect{fill:#2b2416; stroke:var(--gold); stroke-width:1.2}
 .boxx rect.frame{fill:rgba(201,162,39,.03); stroke:var(--gold); stroke-dasharray:6 4; rx:8}
@@ -92,7 +93,7 @@ g.chip:hover rect{fill:#2c3542; stroke:#e2c96a}
   <div><i class="l1"></i>处理语句 &nbsp;<i class="l2" style="width:16px;height:12px"></i>判断</div>
   <div><i class="l4"></i>返回 / 终止 &nbsp;金色虚线框 = 已展开函数</div>
 </div>
-<script id="FD" type="application/json">{"file": "comment_case.py", "functions": [{"q": "__module__", "name": "__module__", "head": ["# 模块入口（模块级代码）"], "cm": [], "b": [{"k": "stmt", "lines": ["\"\"\"注释渲染验证：复合语句头注释、嵌套缩进、多行注释组。\"\"\""], "cm": ["# -*- coding: utf-8 -*-"]}], "calls": [], "by": [], "entry": true}, {"q": "check", "name": "check", "head": ["def check(items):"], "cm": [], "line": 5, "b": [{"k": "stmt", "lines": ["i = 0"], "cm": ["# 函数起始说明"]}, {"k": "while", "h": "while i < len(items):", "b": [{"k": "if", "br": [{"l": "if items[i] < 0:", "b": [{"k": "stmt", "lines": ["i += 1"], "cm": []}, {"k": "continue", "lines": ["continue"], "cm": []}], "t": true}], "cm": []}, {"k": "stmt", "lines": ["i += 1"], "cm": []}], "e": [], "cm": ["# 循环开始前检查（挂 while 头）"]}, {"k": "return", "lines": ["return i"], "cm": []}], "calls": [], "by": [], "entry": true}], "entries": ["__module__", "check"]}</script>
+<script id="FD" type="application/json">{"file": "comment_case.py", "functions": [{"q": "__module__", "name": "__module__", "head": ["# 模块入口（模块级代码）"], "cm": [], "b": [{"k": "docstr", "lines": ["\"\"\"注释渲染验证：复合语句头注释、嵌套缩进、多行注释组。\"\"\""], "cm": ["# -*- coding: utf-8 -*-"]}], "calls": [], "by": [], "entry": true}, {"q": "check", "name": "check", "head": ["def check(items):"], "cm": [], "line": 5, "b": [{"k": "stmt", "lines": ["i = 0"], "cm": ["# 函数起始说明"]}, {"k": "while", "h": "while i < len(items):", "b": [{"k": "if", "br": [{"l": "if items[i] < 0:", "b": [{"k": "stmt", "lines": ["i += 1"], "cm": []}, {"k": "continue", "lines": ["continue"], "cm": []}], "t": true}], "cm": []}, {"k": "stmt", "lines": ["i += 1"], "cm": []}], "e": [], "cm": ["# 循环开始前检查（挂 while 头）"]}, {"k": "return", "lines": ["return i"], "cm": []}], "calls": [], "by": [], "entry": true}], "entries": ["__module__", "check"]}</script>
 <script>
 "use strict";
 const DATA = JSON.parse(document.getElementById("FD").textContent);
@@ -152,7 +153,8 @@ function commentBlock(cm){
 }
 
 function layoutLeaf(s,pfx){
-  const lines = (s.cm||[]).map(t=>({t,c:"cmt"})).concat((s.lines||[]).map(t=>({t})));
+  const codeCls = s.k==="docstr" ? "cmt" : null;
+  const lines = (s.cm||[]).map(t=>({t,c:"cmt"})).concat((s.lines||[]).map(t=>({t,c:codeCls})));
   const w=maxW(lines)+2*PADX, h=lines.length*LH+2*PADY;
   const nodes=[{t:"rect",x:-w/2,y:0,w,h,lines,cls:"nd-"+s.k}];
   const edges=[]; let L=w/2+8, R=w/2+8;
