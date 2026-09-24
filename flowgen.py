@@ -600,8 +600,9 @@ function layoutStmt(s,pfx){
 }
 
 /* ============ SVG 渲染 ============ */
-function textBlock(x,y,lines,cls){
-  let t=`<text x="${x}" y="${y}" text-anchor="middle" class="${cls}">`;
+function textBlock(x,y,lines,cls,anchor){
+  const a=anchor||"middle";
+  let t=`<text x="${x}" y="${y}" text-anchor="${a}" class="${cls}">`;
   lines.forEach((ln,i)=>{
     t+=`<tspan x="${x}" dy="${i?LH:0}"${ln.c?` class="${ln.c}"`:""}>${esc(ln.t)}</tspan>`;
   });
@@ -612,17 +613,18 @@ function nodeSvg(n){
     case "rect":{
       const baseY=n.y+PADY+LH*0.78;
       return `<g class="${n.cls}"><rect class="bx2" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6"/>`
-        + textBlock(n.x+n.w/2, baseY, n.lines, "nt") + `</g>`;
+        + textBlock(n.x+PADX, baseY, n.lines, "nt", "start") + `</g>`;
     }
     case "pill":{
       const baseY=n.y+PADY+LH*0.78;
       return `<g class="pill"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="${n.h/2}"/>`
-        + textBlock(n.x+n.w/2, baseY, n.lines, "pl") + `</g>`;
+        + textBlock(n.x+n.h/2+8, baseY, n.lines, "pl", "start") + `</g>`;
     }
     case "diamond":{
       const p=`${n.cx-n.hw},${n.cy} ${n.cx},${n.cy-n.hh} ${n.cx+n.hw},${n.cy} ${n.cx},${n.cy+n.hh}`;
+      const mw=maxW(n.lines);
       return `<g class="dia"><polygon points="${p}"/>`
-        + textBlock(n.cx, n.cy-n.lines.length*LH/2+LH*0.78, n.lines, "dm") + `</g>`;
+        + textBlock(n.cx-mw/2, n.cy-n.lines.length*LH/2+LH*0.78, n.lines, "dm", "start") + `</g>`;
     }
     case "box":{
       return `<g class="boxx"><rect class="frame" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="8"/>`
