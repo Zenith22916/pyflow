@@ -313,13 +313,19 @@ header .file{font-family:Consolas,monospace; font-size:12px; color:var(--dim)}
 .zoom{display:flex; gap:4px; margin-left:auto}
 .zoom button{background:#232830; color:var(--txt); border:1px solid var(--line); border-radius:5px; padding:3px 10px; cursor:pointer; font-size:12px}
 .zoom button:hover{border-color:var(--gold); color:var(--gold)}
-.idx{display:flex; gap:6px; padding:6px 16px; background:#171a1f; border-bottom:1px solid var(--line); flex:0 0 auto; flex-wrap:wrap; align-items:center}
-.idx .lb{font-size:11px; color:var(--dim)}
-.idx .fn{font-family:Consolas,monospace; font-size:11px; padding:2px 8px; border-radius:9px; border:1px solid var(--line); cursor:pointer; color:var(--dim)}
-.idx .fn.entry{border-color:var(--gold); color:var(--gold)}
-.idx .fn:hover{background:#232830}
-#wrap{flex:1 1 auto; overflow:auto; position:relative; cursor:grab; background:
+.idx{padding:8px 16px; background:#171a1f; border-bottom:1px solid var(--line); flex:0 0 auto}
+#side{width:200px; flex:0 0 auto; background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:12px 8px; scrollbar-width:none; -ms-overflow-style:none}
+#side::-webkit-scrollbar{display:none; width:0; height:0}
+#side .lb{font-size:11px; color:var(--dim); padding:0 8px 8px; letter-spacing:1px}
+#side .fn{display:block; width:100%; text-align:left; padding:5px 10px; margin:1px 0; border-radius:6px; cursor:pointer; font-family:Consolas,"Courier New",monospace; font-size:12px; color:var(--dim); border:1px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#side .fn .star{color:var(--gold); margin-left:5px}
+#side .fn.entry{color:#e2c96a; border-color:rgba(201,162,39,.30)}
+#side .fn:hover{background:#232830}
+#side .fn.active{background:#2a2416; border-color:var(--gold); color:var(--gold)}
+#main{flex:1 1 auto; display:flex; min-height:0}
+#wrap{flex:1 1 auto; min-width:0; overflow:auto; position:relative; cursor:grab; user-select:none; -webkit-user-select:none; scrollbar-width:none; -ms-overflow-style:none; background:
   radial-gradient(circle at 50% 30%, #191c22 0%, var(--bg) 70%)}
+#wrap::-webkit-scrollbar{display:none; width:0; height:0}
 #wrap.dragging{cursor:grabbing}
 #cv svg{display:block}
 .legend{position:fixed; right:14px; bottom:12px; background:rgba(23,26,31,.92); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:11px; color:var(--dim); line-height:1.9; z-index:5}
@@ -368,8 +374,10 @@ g.chip:hover rect{fill:#2c3542; stroke:#e2c96a}
     <button onclick="resetView()">复位</button>
   </div>
 </header>
-<div class="idx" id="idx"></div>
-<div id="wrap"><div id="cv"></div></div>
+<div id="main">
+  <aside id="side"><div class="lb">函数索引</div><div id="idx"></div></aside>
+  <div id="wrap"><div id="cv"></div></div>
+</div>
 <div class="legend">
   <div><i class="l3"></i>开始 / 结束（入口与函数）</div>
   <div><i class="l1"></i>处理语句 &nbsp;<i class="l2" style="width:16px;height:12px"></i>判断</div>
@@ -728,6 +736,7 @@ let drag=null, dragMoved=false;
 const wrapEl=document.getElementById("wrap");
 wrapEl.addEventListener("mousedown",e=>{
   if(e.button!==0) return;
+  e.preventDefault();   // 防止拖拽时选中页面文本
   drag={x:e.clientX,y:e.clientY,sl:wrapEl.scrollLeft,st:wrapEl.scrollTop};
   dragMoved=false;
 });
@@ -755,6 +764,7 @@ document.getElementById("cv").addEventListener("click",e=>{
 
 function jumpFn(q){
   const f=ctx.funcs[q]; if(!f) return;
+  document.querySelectorAll("#side .fn").forEach(el=>el.classList.toggle("active", el.dataset.q===q));
   const wrap=document.getElementById("wrap");
   if(f.entry){
     const sec=ctx.sections.find(s=>s.q===q);
@@ -777,11 +787,15 @@ function jumpFn(q){
 
 function buildIndex(){
   const idx=document.getElementById("idx");
-  let html='<span class="lb">函数索引（点击定位/展开）：</span>';
+  let html="";
   DATA.functions.forEach(f=>{
-    html+=`<span class="fn${f.entry?" entry":""}" onclick="jumpFn('${f.q}')">${esc(f.q)}${f.entry?" ★":""}</span>`;
+    html+=`<span class="fn${f.entry?" entry":""}" data-q="${esc(f.q)}" title="${esc(f.q)}${f.entry?"（入口）":"（被调用："+(f.by.join("、")||"-")+"）"}">${esc(f.q)}${f.entry?'<span class="star">★</span>':""}</span>`;
   });
   idx.innerHTML=html;
+  idx.addEventListener("click",e=>{
+    const el=e.target.closest(".fn");
+    if(el) jumpFn(el.dataset.q);
+  });
 }
 
 buildIndex();
