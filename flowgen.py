@@ -323,10 +323,10 @@ header .file{font-family:Consolas,monospace; font-size:12px; color:var(--dim)}
 #side .fn:hover{background:#232830}
 #side .fn.active{background:#2a2416; border-color:var(--gold); color:var(--gold)}
 #main{flex:1 1 auto; display:flex; min-height:0}
-#wrap{flex:1 1 auto; min-width:0; overflow:auto; position:relative; cursor:grab; user-select:none; -webkit-user-select:none; scrollbar-width:none; -ms-overflow-style:none; background:
+#wrap{flex:1 1 auto; min-width:0; overflow:hidden; position:relative; cursor:grab; user-select:none; -webkit-user-select:none; background:
   radial-gradient(circle at 50% 30%, #191c22 0%, var(--bg) 70%)}
-#wrap::-webkit-scrollbar{display:none; width:0; height:0}
 #wrap.dragging{cursor:grabbing}
+#cv{transform-origin:0 0; will-change:transform}
 #cv svg{display:block}
 .legend{position:fixed; right:14px; bottom:12px; background:rgba(23,26,31,.92); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:11px; color:var(--dim); line-height:1.9; z-index:5}
 .legend i{display:inline-block; width:14px; height:9px; margin-right:6px; vertical-align:middle; border:1px solid}
@@ -695,7 +695,7 @@ function renderAll(){
   });
   const W=Math.max(...Ls)+Math.max(...Rs)+80, H=y;
   const offX=Math.max(...Ls)+40;
-  const svg=`<svg width="${(W*view.s).toFixed(0)}" height="${(H*view.s).toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" xmlns="http://www.w3.org/2000/svg">
+  const svg=`<svg width="${W.toFixed(0)}" height="${H.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" xmlns="http://www.w3.org/2000/svg">
 <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b95a5"/></marker>
 <marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6fa8dc"/></marker></defs>
 <g transform="translate(${offX},0)">
@@ -706,45 +706,49 @@ function renderAll(){
 }
 
 /* ============ 交互 ============ */
-const view={s:1};
+const view={s:1,tx:0,ty:0};
+function applyView(){
+  document.getElementById("cv").style.transform=`translate(${view.tx}px,${view.ty}px) scale(${view.s})`;
+}
 function zoomBy(k){
   const wrap=document.getElementById("wrap");
+  const cx=wrap.clientWidth/2, cy=wrap.clientHeight/2;
   const sOld=view.s;
-  view.s=Math.min(3,Math.max(0.35,view.s*k));
-  renderAll();
-  const cx=(wrap.scrollLeft+wrap.clientWidth/2)/sOld;   // viewBox 坐标
-  const cy=(wrap.scrollTop+wrap.clientHeight/2)/sOld;
-  wrap.scrollLeft=cx*view.s-wrap.clientWidth/2;
-  wrap.scrollTop=cy*view.s-wrap.clientHeight/2;
+  view.s=Math.min(3,Math.max(0.2,view.s*k));
+  const px=(cx-view.tx)/sOld, py=(cy-view.ty)/sOld;
+  view.tx=cx-px*view.s; view.ty=cy-py*view.s;
+  applyView();
 }
 function fitWidth(){
   const wrap=document.getElementById("wrap");
   const svg=document.querySelector("#cv svg");
   const W=parseFloat(svg.getAttribute("viewBox").split(" ")[2]);
-  view.s=Math.min(1.6,Math.max(0.3,(wrap.clientWidth-30)/W));
-  renderAll();
+  view.s=Math.min(1.6,Math.max(0.3,(wrap.clientWidth-40)/W));
+  view.tx=(wrap.clientWidth-W*view.s)/2;
+  view.ty=24;
+  applyView();
 }
-function resetView(){ view.s=1; renderAll(); document.getElementById("wrap").scrollTo(0,0); }
+function resetView(){ view.s=1; view.tx=40; view.ty=24; applyView(); }
 
 document.getElementById("wrap").addEventListener("wheel",e=>{
   e.preventDefault();          // 滚轮直接缩放，平移交给拖拽
   zoomBy(e.deltaY<0?1.12:0.9);
 },{passive:false});
 
-/* ============ 鼠标拖拽平移 ============ */
+/* ============ 鼠标拖拽平移（自由平移，无边界） ============ */
 let drag=null, dragMoved=false;
 const wrapEl=document.getElementById("wrap");
 wrapEl.addEventListener("mousedown",e=>{
   if(e.button!==0) return;
   e.preventDefault();   // 防止拖拽时选中页面文本
-  drag={x:e.clientX,y:e.clientY,sl:wrapEl.scrollLeft,st:wrapEl.scrollTop};
+  drag={x:e.clientX,y:e.clientY,tx:view.tx,ty:view.ty};
   dragMoved=false;
 });
 window.addEventListener("mousemove",e=>{
   if(!drag) return;
   const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
   if(Math.abs(dx)+Math.abs(dy)>4){ dragMoved=true; wrapEl.classList.add("dragging"); }
-  if(dragMoved){ wrapEl.scrollLeft=drag.sl-dx; wrapEl.scrollTop=drag.st-dy; }
+  if(dragMoved){ view.tx=drag.tx+dx; view.ty=drag.ty+dy; applyView(); }
 });
 window.addEventListener("mouseup",()=>{
   drag=null; wrapEl.classList.remove("dragging");
@@ -757,21 +761,18 @@ document.getElementById("cv").addEventListener("click",e=>{
   const path=g.dataset.path, fn=g.dataset.fn;
   const key=path+"::"+fn;
   if(ctx.exp.has(key)) ctx.exp.delete(key); else ctx.exp.add(key);
-  const sy=wrapEl.scrollTop, sx=wrapEl.scrollLeft;
   renderAll();
-  wrapEl.scrollTop=sy; wrapEl.scrollLeft=sx;
 });
 
 function jumpFn(q){
   const f=ctx.funcs[q]; if(!f) return;
   document.querySelectorAll("#side .fn").forEach(el=>el.classList.toggle("active", el.dataset.q===q));
-  const wrap=document.getElementById("wrap");
   if(f.entry){
     const sec=ctx.sections.find(s=>s.q===q);
-    if(sec){ wrap.scrollTo({top:Math.max(0,sec.y0*view.s-40),behavior:"smooth"}); }
+    if(sec){ view.ty=40-sec.y0*view.s; applyView(); }
     return;
   }
-  // 被调用函数：找第一个未展开的调用点，展开并定位
+  // 被调用函数：找第一个未展开的调用点，展开并把该标记移到视口中部
   const chips=[...document.querySelectorAll(`g.chip[data-fn="${CSS.escape(q)}"]`)];
   if(!chips.length) return;
   const target=chips.find(c=>!ctx.exp.has(c.dataset.path+"::"+q))||chips[0];
@@ -780,8 +781,10 @@ function jumpFn(q){
   renderAll();
   const el=document.querySelector(`g.chip[data-path="${CSS.escape(path)}"]`);
   if(el){
-    const r=el.getBoundingClientRect(), c=wrap.getBoundingClientRect();
-    wrap.scrollTo({top:wrap.scrollTop+r.top-c.top-120,left:wrap.scrollLeft+r.left-c.left-wrap.clientWidth/2,behavior:"smooth"});
+    const r=el.getBoundingClientRect(), c=wrapEl.getBoundingClientRect();
+    view.tx-=(r.left+r.width/2)-(c.left+c.width/2);
+    view.ty-=(r.top+r.height/2)-(c.top+c.height/2)-80;
+    applyView();
   }
 }
 
